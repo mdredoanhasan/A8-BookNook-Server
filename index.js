@@ -66,6 +66,16 @@ app.post("/Books", async (req, res) => {
 
 //end...
 
+//find user borrowing books using email // start
+
+app.get('/My-Borrows/:email', async (req, res) => {
+  const { email } = req.params
+  const result = await browseCollection.find({ email: email })
+  res.send(result)
+})
+
+//end....
+
 app.get("/", (req, res) => {
   res.send({ msg: "Server is running" });
 });
