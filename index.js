@@ -68,13 +68,27 @@ app.post("/Books", async (req, res) => {
 
 //find user borrowing books using email // start
 
-app.get('/My-Borrows/:email', async (req, res) => {
-  const { email } = req.params
-  const result = await browseCollection.find({ email: email })
-  res.send(result)
-})
+app.get("/My-Borrows/:email", async (req, res) => {
+  const { email } = req.params;
+  const result = await browseCollection.find({ email: email }).toArray();
+  res.send(result);
+});
 
 //end....
+
+//return books from my borrow //start
+app.delete("/Borrows/:id", async (req, res) => {
+  const { id } = req.params;
+  const result = await browseCollection.deleteOne({_id: new ObjectId(id)})
+  res.send(result);
+});
+
+//end.....
+
+app.get('/new-arrival', async(req, res) => {
+  const result  = await bookCollection.find().limit(6).toArray()
+  res.send(result)
+})
 
 app.get("/", (req, res) => {
   res.send({ msg: "Server is running" });
