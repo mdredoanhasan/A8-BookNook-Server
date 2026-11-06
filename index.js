@@ -32,9 +32,7 @@ const browseCollection = db.collection("Browse");
 //for add new books from client side // start
 app.post("/Add-Books", async (req, res) => {
   const data = req.body;
-
   const result = await bookCollection.insertOne(data);
-  console.log(result);
   res.send(result);
 });
 
@@ -54,6 +52,15 @@ app.get("/All-Books", async (req, res) => {
 app.get("/All-Books/:id", async (req, res) => {
   const { id } = req.params;
   const result = await bookCollection.findOne({ _id: new ObjectId(id) });
+  res.send(result);
+});
+
+//end...
+
+//add books to borrow section //start
+app.post("/Books", async (req, res) => {
+  const data = req.body;
+  const result = await browseCollection.insertOne(data);
   res.send(result);
 });
 
