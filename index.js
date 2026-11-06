@@ -85,10 +85,17 @@ app.delete("/Borrows/:id", async (req, res) => {
 
 //end.....
 
-app.get('/new-arrival', async(req, res) => {
-  const result  = await bookCollection.find().limit(6).toArray()
-  res.send(result)
-})
+//show only 6 books //start
+app.get("/new-arrival", async (req, res) => {
+  const result = await bookCollection
+    .find()
+    .sort({ createdAt: -1 })
+    .limit(6)
+    .toArray();
+  res.send(result);
+});
+
+//end...
 
 app.get("/", (req, res) => {
   res.send({ msg: "Server is running" });
