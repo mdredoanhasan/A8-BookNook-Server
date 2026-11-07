@@ -4,9 +4,25 @@ import cors from "cors";
 import "dotenv/config";
 
 const app = express();
-const PORT = 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
-app.use(cors({ origin: process.env.CLIENT_URL }));
+const allowedOrigins = (process.env.CLIENT_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
+  throw new Error("CLIENT_URL must contain the deployed client origin.");
+}
+
+app.use(
+  cors({
+    origin: [
+      "https://book-nook-client-fawn.vercel.app",
+      "http://localhost:3000",
+    ],
+  }),
+);
 app.use(express.json());
 
 //mongodb connection //start
@@ -106,7 +122,7 @@ if (booksWithoutCopyCounts.length > 0) {
 }
 
 //for add new books from client side // start
-app.post("/Add-Books",verifyJWT , async (req, res) => {
+app.post("/Add-Books", verifyJWT, async (req, res) => {
   const totalCopies = Number(req.body?.totalCopies);
   if (!Number.isInteger(totalCopies) || totalCopies < 1) {
     return res.status(400).json({
@@ -116,6 +132,9 @@ app.post("/Add-Books",verifyJWT , async (req, res) => {
 
   const result = await bookCollection.insertOne({
     ...req.body,
+    addedByName: req.user.name,
+    addedBy: req.user.email,
+    email: req.user.email,
     totalCopies,
     availableCopies: totalCopies,
   });
@@ -144,10 +163,10 @@ app.get("/All-Books/:id", async (req, res) => {
 //end...
 
 //add books to borrow section //start
-app.post("/Books",verifyJWT , async (req, res) => {
+app.post("/Books", verifyJWT, async (req, res) => {
   const data = req.body;
   const bookId = String(data?.bookId || "");
-  const email = data?.email;
+  const email = req.user.email;
   if (!ObjectId.isValid(bookId) || typeof email !== "string" || !email) {
     return res
       .status(400)
@@ -211,7 +230,12 @@ app.post("/Books",verifyJWT , async (req, res) => {
   }
 
   try {
-    const result = await browseCollection.insertOne({ ...data, bookId });
+    const result = await browseCollection.insertOne({
+      ...data,
+      bookId,
+      email,
+      user: req.user.name,
+    });
     return res.send(result);
   } catch (error) {
     await bookCollection.updateOne(
@@ -229,28 +253,40 @@ app.post("/Books",verifyJWT , async (req, res) => {
 
 //find user borrowing books using email // start
 
-app.get("/My-Borrows/:email",verifyJWT, async (req, res) => {
-  const { email } = req.params;
-  const result = await browseCollection.find({ email: email }).toArray();
-  res.send(result);
+app.get("/My-Borrows/:email", verifyJWT, async (req, res) => {
+  if (req.params.email !== req.user.email) {
+    return res
+      .status(403)
+      .json({ message: "You can only view your own borrows." });
+  }
+  const result = await browseCollection
+    .find({ email: req.user.email })
+    .toArray();
+  return res.send(result);
 });
 
 //end....
 
 //return books from my borrow //start
-app.delete("/Borrows/:id",verifyJWT , async (req, res) => {
+app.delete("/Borrows/:id", verifyJWT, async (req, res) => {
   const { id } = req.params;
   if (!ObjectId.isValid(id)) {
     return res.status(400).json({ message: "Invalid borrow record ID." });
   }
 
   const borrowId = new ObjectId(id);
-  const borrow = await browseCollection.findOne({ _id: borrowId });
+  const borrow = await browseCollection.findOne({
+    _id: borrowId,
+    email: req.user.email,
+  });
   if (!borrow) {
     return res.status(404).json({ message: "Borrow record not found." });
   }
 
-  const deleted = await browseCollection.deleteOne({ _id: borrowId });
+  const deleted = await browseCollection.deleteOne({
+    _id: borrowId,
+    email: req.user.email,
+  });
   if (deleted.deletedCount === 0) {
     return res.status(404).json({ message: "Borrow record not found." });
   }
@@ -305,13 +341,17 @@ app.get("/new-arrival", async (req, res) => {
 
 //end...
 
-app.get("/My-Books/:email", async (req, res) => {
-  const { email } = req.params;
-  const result = await bookCollection.find({ email: email }).toArray();
-  res.send(result);
+app.get("/My-Books/:email", verifyJWT, async (req, res) => {
+  if (req.params.email !== req.user.email) {
+    return res
+      .status(403)
+      .json({ message: "You can only view your own books." });
+  }
+  const result = await bookCollection.find({ email: req.user.email }).toArray();
+  return res.send(result);
 });
 
-app.delete("/Books/:id",verifyJWT , async (req, res) => {
+app.delete("/Books/:id", verifyJWT, async (req, res) => {
   const { id } = req.params;
   if (!ObjectId.isValid(id)) {
     return res.status(400).json({ message: "Invalid book ID." });
@@ -324,18 +364,35 @@ app.delete("/Books/:id",verifyJWT , async (req, res) => {
       message: "This book cannot be deleted while it is borrowed.",
     });
   }
-  const result = await bookCollection.deleteOne({ _id: new ObjectId(id) });
+  const result = await bookCollection.deleteOne({
+    _id: new ObjectId(id),
+    email: req.user.email,
+  });
+  if (result.deletedCount === 0) {
+    return res
+      .status(404)
+      .json({ message: "Book not found or not owned by you." });
+  }
   return res.send(result);
 });
 
-app.patch("/Books/:id",verifyJWT , async (req, res) => {
+app.patch("/Books/:id", verifyJWT, async (req, res) => {
   const { id } = req.params;
-  const updatedData = req.body;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid book ID." });
+  }
+  const { title, author, category, description } = req.body;
+  const updatedData = { title, author, category, description };
   const result = await bookCollection.updateOne(
-    { _id: new ObjectId(id) },
+    { _id: new ObjectId(id), email: req.user.email },
     { $set: updatedData },
   );
-  res.json(result);
+  if (result.matchedCount === 0) {
+    return res
+      .status(404)
+      .json({ message: "Book not found or not owned by you." });
+  }
+  return res.json(result);
 });
 
 app.get("/", (req, res) => {
@@ -345,3 +402,5 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running at ${PORT}`);
 });
+
+export default app;
