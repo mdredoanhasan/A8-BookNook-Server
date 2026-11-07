@@ -79,7 +79,7 @@ app.get("/My-Borrows/:email", async (req, res) => {
 //return books from my borrow //start
 app.delete("/Borrows/:id", async (req, res) => {
   const { id } = req.params;
-  const result = await browseCollection.deleteOne({_id: new ObjectId(id)})
+  const result = await browseCollection.deleteOne({ _id: new ObjectId(id) });
   res.send(result);
 });
 
@@ -89,13 +89,25 @@ app.delete("/Borrows/:id", async (req, res) => {
 app.get("/new-arrival", async (req, res) => {
   const result = await bookCollection
     .find()
-    .sort({ createdAt: -1 })
+    .sort({ _id: -1 })
     .limit(6)
     .toArray();
   res.send(result);
 });
 
 //end...
+
+app.get("/My-Books/:email", async (req, res) => {
+  const { email } = req.params;
+  const result = await bookCollection.find({ email: email }).toArray();
+  res.send(result);
+});
+
+app.delete("/Books/:id", async (req, res) => {
+  const { id } = req.params;
+  const result = await bookCollection.deleteOne({ _id: new ObjectId(id) });
+  res.send(result);
+});
 
 app.get("/", (req, res) => {
   res.send({ msg: "Server is running" });
